@@ -1,352 +1,333 @@
 import json
-import readline
-import copy
-import os
-from datetime import datetime
-import pickle
-
-from consts import MESSAGE_IDS, SAFE_BUILTINS
+from consts import SAFE_BUILTINS
 
 class Node:
-    def __init__(self, data: dict, nodes: dict, shared_data: dict, node_id: str, text_adv: 'TextAdventure'):
-        self.data = data
-        self.nodes = nodes
+    def __init__(self, game: 'TextAdventure', node_id: str, name: str, desc: str, end_desc: str = '', set_sd: dict = None, init_sd: dict = None, options: list['Option'] = None, force_move: list[dict] = [], on_load: str = '', on_ready: str = '', on_move: str = ''):
+        self.game = game
+        self.shared_data: SharedData = self.game.shared_data
+        
         self.node_id = node_id
-        self.text_adv = text_adv
+        self.name = name
+        self.desc = desc
+        self.end_desc = end_desc
+        self.options = options or []
+        self.on_load = on_load
+        self.on_ready = on_ready
+        self.on_move = on_move
+        self.force_move = force_move
 
-        self.name = data.get('name', '')
-        self.description = data.get('description', '')
-
-        self.options = data.get('options', {})
-        self.force_select = data.get('force_select', [])
-
-        self.set_d = data.get('set_d', {})
-        self.init_d = data.get('init_d', {})
-
-        self.end = data.get('end', False)
-        self.end_description = data.get('end_description', '')
-
-        self.python_script = data.get('python_script', '')
-        self.onmove_script = data.get('onmove_script', '')
-
-        self.shared_data = shared_data
+        self.set_sd = set_sd or {}
+        self.init_sd = init_sd or {}
     
-    def full_init(self):
-        self.update_shared_datas()
-        self.run_script()
+    def get_option_list(self):
+        return [option.to_json_schema() for option in self.options]
+    
+    def get_force_move(self):
+        for move in self.force_move:
+            condition = move.get("condition", "True")
+            if self.shared_data.expr(condition):
+                return self.game.get_node(move["node_id"])
+        return None
 
-    def get_formula_result(self, formula: str):
-        return self.text_adv.get_formula_result(formula)
+    def set_shared_data(self):
+        for key, value in self.set_sd.items():
+            self.shared_data.write(key, self.shared_data.expr(value))
     
-    def can_show(self, option_dat: dict):
-        '''Check if the option can be shown.'''
-        show_condition = option_dat.get("show_condition", "True")
-        return self.get_formula_result(show_condition)
-    
-    def can_move(self, option_dat: dict):
-        '''Check if the option can be moved.'''
-        move_condition = option_dat.get("move_condition", "True")
-        return self.get_formula_result(move_condition)
+    def init_shared_data(self):
+        for key, value in self.init_sd.items():
+            if key not in self.shared_data:
+                self.shared_data.write(key, self.shared_data.expr(value))
     
     def options_can_show(self):
-        '''Check if the options can be shown.'''
-        options_can_show = {}
+        return [option for option in self.options if option.can_show()]
 
-        for option_name, option_dat in self.options.items():
-            if self.can_show(option_dat):
-                options_can_show[option_name] = copy.deepcopy(option_dat)
-
-        return copy.deepcopy(options_can_show)
-    
     def options_can_move(self):
-        '''Check if the options can be moved.'''
-        options_can_move = {}
-
-        for option_name, option_dat in self.options.items():
-            if self.can_move(option_dat):
-                options_can_move[option_name] = copy.deepcopy(option_dat)
-
-        return copy.deepcopy(options_can_move)
+        return [option for option in self.options if option.can_move()]
     
+    def options_available(self):
+        return [option for option in self.options_can_show() if option.can_move()]
     
-    def show_no_move_options(self):
-        '''Show the options that can be shown but cannot be moved.'''
-        can_move = self.options_can_move()
-        no_move = {}
+    def options_disable(self):
+        return [option for option in self.options_can_show() if not option.can_move()]
 
-        for option_name, option_dat in self.options.items():
-            if option_name not in can_move.keys() and self.can_show(option_dat):
-                no_move[option_name] = copy.deepcopy(option_dat)
-
-        return copy.deepcopy(no_move)
+    def prepare(self):
+        self.game.shared_data.script(self.on_load)
+        self.init_shared_data()
+        self.set_shared_data()
+        self.game.shared_data.script(self.on_ready)
     
-    def show_and_move_options(self):
-        '''Show the options that can be shown and moved.'''
-        can_move = self.options_can_move()
-        options_can_show = self.options_can_show()
-        
+    def to_json_schema(self):
         return {
-            name: copy.deepcopy(dat) 
-            for name, dat in can_move.items() 
-            if name in options_can_show
+            self.node_id: {
+                "name": self.name,
+                "desc": self.desc,
+                "end_desc": self.end_desc,
+                "set_sd": self.set_sd,
+                "init_sd": self.init_sd,
+                "options": self.get_option_list(),
+                "on_load": self.on_load,
+                "on_ready": self.on_ready,
+                "on_move": self.on_move,
+                "force_move": self.force_move,
+            }
         }
 
-    def update_shared_datas(self):
-        '''Update the shared datas of the current node.'''
-        for key in self.set_d.keys():
-            self.shared_data[key] = self.get_formula_result(self.set_d[key])
+    def __rshift__(self, option: 'Option'):
+        return option.move()
+    
+    def __invert__(self):
+        return self.end_desc
+    
+class SharedData:
+    def __init__(self, data: dict = None):
+        self.data = data or {}
+    
+    def write(self, key: str, value):
+        self.data[key] = value
+    
+    def read(self, key: str):
+        return self.data.get(key, None)
+    
+    def get(self, key: str, default=None):
+        return self.data.get(key, default)
 
-        for key in self.init_d.keys():
-            if key not in self.shared_data.keys():
-                self.shared_data[key] = self.get_formula_result(self.init_d[key])
+    def get_script_run_env(self, addition: dict = {}):
+        return {
+            "globals": {
+                "__builtins__": SAFE_BUILTINS,
+                "shared_data": self,
+                **addition,
+            }, 
+            "locals": {},
+        }
 
-    def force_move(self):
-        '''Force move to the next node.'''
-        if not self.force_select:
-            return None
+    def expr(self, expr: str, **addition):
+        renv = self.get_script_run_env(addition)
+        return eval(expr, renv["globals"], renv["locals"])
 
-        for force in self.force_select:
-            condition = force.get('condition', 'True')
-            if self.get_formula_result(condition):
-                data = self.nodes[force["next_node"]]
-                return Node(data, self.nodes, self.shared_data, force["next_node"], self.text_adv)
-        else:
-            return None
-    def run_script(self, script: str = None):
-        '''Run the python script of the current node.'''
-        if script is not None:
-            try:
-                self.text_adv.run_script(script)
-            except Exception as e:
-                self.text_adv.log_handler.log("ERR_SCRIPT_ERROR", e=f"{e.__class__.__name__}: {e}; on line {e.__traceback__.tb_lineno} in {e.__traceback__.tb_frame.f_code.co_name}", script_desc=self.python_script.splitlines()[e.__traceback__.tb_lineno-1])
-        else:
-            self.run_script(self.python_script)
+    def script(self, script: str, **addition):
+        renv = self.get_script_run_env(addition)
+        exec(script, renv["globals"], renv["locals"])
+    
+    def format_string(self, s: str, **addition):
+        return s.format(**self.data, **addition)
+    
+    def __getitem__(self, key: str):
+        return self.read(key)
+    
+    def __setitem__(self, key: str, value):
+        self.write(key, value)
+    
+    def __contains__(self, key: str):
+        return key in self.data
 
-    def move(self, option: str):
-        '''Move to the next node.'''
-        if option in self.options.keys():
-            self.run_script(self.onmove_script)
-            next_node_name = self.options[option].get('next_node', '')
+class Option:
+    def __init__(self, game: 'TextAdventure', option_id: str, show_name: str, desc: str, next_node: 'Node', show_condition: str = 'True', move_condition: str = 'True', cant_move_desc: str = "（无法移动）"):
+        self.game = game
+        self.shared_data: SharedData = self.game.shared_data
+        self.option_id = option_id
+        self.show_name = show_name
+        self.desc = desc
+        self.next_node = next_node
+        self.show_condition = show_condition
+        self.move_condition = move_condition
 
-            if next_node_name in self.nodes.keys():
-                new_data = copy.deepcopy(self.nodes[next_node_name])
-                new_node = Node(new_data, self.nodes, self.shared_data, next_node_name, self.text_adv)
-            return new_node
+        self.cant_move_desc = cant_move_desc
+    
+    def to_json_schema(self):
+        return {
+            self.option_id: {
+                "show_name": self.show_name,
+                "desc": self.desc,
+                "next_node": self.next_node.node_id,
+                "show_condition": self.show_condition,
+                "move_condition": self.move_condition,
+                "cant_move_desc": self.cant_move_desc,
+            }
+        }
+    
+    @classmethod
+    def from_json_schema(cls, data: dict, game: 'TextAdventure'):
+        option_id = list(data.keys())[0]
+        option_data = data[option_id]
+
+        return Option(
+            game=game,
+            option_id=option_id,
+            show_name=option_data["show_name"],
+            desc=option_data["desc"],
+            next_node=game.nodes[option_data["next_node"]],
+            show_condition=option_data["show_condition"],
+            move_condition=option_data["move_condition"],
+            cant_move_desc=option_data["cant_move_desc"],
+        )
+    
+    def can_show(self):
+        return self.shared_data.expr(self.show_condition)
+    
+    def can_move(self):
+        return self.shared_data.expr(self.move_condition)
+    
+    def move(self):
+        if self.can_move():
+            return self.next_node
         else:
             return None
     
-    # 在 Node 类中添加方法
-    def render_description(self, text):
-        '''渲染描述文本，支持变量和简单表达式'''
-        try:
-            # 先尝试普通format
-            return text.format(**self.shared_data)
-        except KeyError as e:
-            # 如果失败，尝试用eval计算表达式
-            import re
-            pattern = r'\{([^}]+)\}'
-            def replace_expr(match):
-                expr = match.group(1)
-                try:
-                    # 尝试作为表达式计算
-                    result = eval(expr, {"__builtins__": SAFE_BUILTINS}, self.shared_data)
-                    return str(result)
-                except:
-                    # 计算失败，保持原样
-                    return match.group(0)
-            return re.sub(pattern, replace_expr, text)
-
-class LogHandler:
-    def log(self, message_id: str, end: str = '\n', **kwargs):
-        '''Log the message.'''
-        print(MESSAGE_IDS[message_id].format(**kwargs), end=end)
-    
-    def input(self, message_id: str, **kwargs):
-        '''Log the message and return the input.'''
-        return input(MESSAGE_IDS[message_id].format(**kwargs))
-
-DEFAULT_LOG_HANDLER = LogHandler()
+    def __bool__(self):
+        return self.can_move()
 
 class TextAdventure:
-    def __init__(self, story_data: dict, log_handler: LogHandler = DEFAULT_LOG_HANDLER):
-        self.name = story_data.get('name', '')
-        self.start_node_name = story_data.get('start_node', '')
-        self.nodes = story_data.get('nodes', {})
-        self.init_inputs = story_data.get('init_inputs', {})
+    def __init__(self, game_name: str, start_node_id: str, init_inputs: dict = None, nodes: dict[str, Node] = None, on_load: str = '', on_ready: str = '', on_move: str = ''):
+        self.game_name = game_name
+        self.nodes = nodes or {}
+        self.init_inputs = init_inputs or {}
+        self.start_node_id = start_node_id
+        self.shared_data = SharedData()
 
-        self.shared_data = story_data.get('shared_data', {})
-        self.onready_script = story_data.get('onready_script', '')
+        self.on_load = on_load
+        self.on_ready = on_ready
+        self.on_move = on_move
 
-        self.script_run_globals = {
-            "__builtins__": SAFE_BUILTINS,            
-            "write_data": self.write_data, 
-            "read_data": self.read_data, 
-            "exist_data": self.exist_data
-            }
-
-        self.current_node = Node(self.nodes[self.start_node_name], self.nodes, self.shared_data, self.start_node_name, self)
-        self.log_handler = log_handler
-        
-    def write_data(self, key: str, value):
-        '''Write the data to the shared data.'''
-        self.shared_data[key] = value
-    
-    def read_data(self, key: str):
-        '''Read the data from the shared data.'''
-        return self.shared_data[key]
-    
-    def exist_data(self, key: str):
-        '''Check if the data exists in the shared data.'''
-        return key in self.shared_data.keys()
-
-    def dump(self, filename: str):
-        '''Dump the current node.'''
-        with open(filename, "wb") as f:
-            pickle.dump(self.current_node, f)
-
-        self.log_handler.log("DUMP_CURRENT_NODE", filename=filename)
-    
-    def get_formula_result(self, formula: str, **additions):
-        '''Get the result of the formula.'''
-        return eval(formula, self.script_run_globals, {**self.shared_data, **additions})
-    
-    def run_script(self, script: str):
-        '''Run the python script.'''
-        try:
-            exec(script, self.script_run_globals)
-            return True
-        except Exception as e:
-            lineno = e.__traceback__.tb_lineno
-            self.log_handler.log("ERR_SCRIPT_ERROR", e=f"{e.__class__.__name__}: {e}; on line {lineno} in {e.__traceback__.tb_frame.f_code.co_name}", script_desc=script.splitlines()[lineno-1])
-            return False
-        
-    @classmethod
-    def from_json(cls, filename: str, log_handler: LogHandler = DEFAULT_LOG_HANDLER):
-        '''Load the current node.'''
-        with open(filename, "r") as f:
-            data = json.load(f)
-
-        return cls(data, log_handler)
+        self.current_node: Node = self.nodes[self.start_node_id]
     
     @classmethod
-    def load(cls, filename: str, log_handler: LogHandler = DEFAULT_LOG_HANDLER):
-        '''Load the current node.'''
-        with open(filename, "rb") as f:
-            current_node = pickle.load(f)
-
-        return cls(current_node, log_handler)
-    
-    def get_one_init_input(self, init_input_dat: dict):
-        '''Get the input for one init data.'''
-        desc = init_input_dat.get('desc', '')
-        converter = init_input_dat.get('converter', 'str')
-        condition = init_input_dat.get('condition', 'True')
-        condition_desc = init_input_dat.get('condition_desc', '')
-
-        value = self.log_handler.input("INPUT", prompt=desc)
-        final_val = self.get_formula_result(f"{converter}({repr(value)})", value=value)
-
-        while not self.get_formula_result(condition, val = final_val):
-            self.log_handler.log("ERR_INVALID_INPUT", condition_desc=condition_desc)
-            value = self.log_handler.input("INPUT", prompt=desc)
-            final_val = self.get_formula_result(f"{converter}({repr(value)})", value=value)
+    def from_json_schema(cls, data: dict):
+        game = cls.__new__(cls)
+        game.shared_data = SharedData()
+        game.nodes = {}
         
-        return final_val
+        # ========== 阶段 1：创建所有裸 Node ==========
+        for node_id in data["nodes"].keys():
+            game.nodes[node_id] = Node.__new__(Node)
+        
+        # ========== 阶段 2：初始化所有 Node（填充 options）==========
+        for node_id, node_obj in game.nodes.items():
+            node_data = data["nodes"][node_id]
+            
+            # 先收集 options 数据，但不创建 Option（需要所有 Node 就绪）
+            options_data = node_data.get("options", [])
+            
+            # 初始化 Node（除了 options）
+            node_obj.game = game
+            node_obj.shared_data = game.shared_data
+            node_obj.node_id = node_id
+            node_obj.name = node_data["name"]
+            node_obj.desc = node_data["desc"]
+            node_obj.end_desc = node_data.get("end_desc", "")
+            node_obj.set_sd = node_data.get("set_sd", {})
+            node_obj.init_sd = node_data.get("init_sd", {})
+            node_obj.force_move = node_data.get("force_move", [])
+            node_obj.on_load = node_data.get("on_load", "")
+            node_obj.on_ready = node_data.get("on_ready", "")
+            node_obj.on_move = node_data.get("on_move", "")
+            node_obj.options = []  # 先空着
+        
+        # ========== 阶段 3：创建所有 Option（现在所有 Node 都已就绪）==========
+        for node_id, node_obj in game.nodes.items():
+            node_data = data["nodes"][node_id]
+            options_data = node_data.get("options", [])
+            
+            for opt_data in options_data:
+                opt_id = list(opt_data.keys())[0]
+                opt_info = opt_data[opt_id]
+                
+                option = Option(
+                    game=game,
+                    option_id=opt_id,
+                    show_name=opt_info["show_name"],
+                    desc=opt_info["desc"],
+                    next_node=game.nodes[opt_info["next_node"]],
+                    show_condition=opt_info.get("show_condition", "True"),
+                    move_condition=opt_info.get("move_condition", "True"),
+                    cant_move_desc=opt_info.get("cant_move_desc", "（无法移动）"),
+                )
+                node_obj.options.append(option)
+        
+        # ========== 阶段 4：初始化 Game ==========
+        game.game_name = data["game_name"]
+        game.start_node_id = data["start_node_id"]
+        game.init_inputs = data.get("init_inputs", {})
+        game.on_load = data.get("on_load", "")
+        game.on_ready = data.get("on_ready", "")
+        game.on_move = data.get("on_move", "")
+        game.current_node = game.nodes[game.start_node_id]
+        
+        return game
     
     def get_init_inputs(self):
-        '''Get the init inputs.'''
-        self.log_handler.log("INPUT_INIT_BEGIN")
-        for init_input_name, init_input_dat in self.init_inputs.items():
-            self.shared_data[init_input_name] = self.get_one_init_input(init_input_dat)
-            self.log_handler.log("INPUT_INIT_BOUNDARY")
+        for key, data in self.init_inputs.items():
+            prompt = data.get("prompt", f"请输入 {key}：")
 
-        self.log_handler.log("INPUT_INIT_END")
+            converter = data.get("converter", 'str')
+            condition = data.get("condition", 'True')
+            condition_desc = data.get("condition_desc", f"输入值不符合要求 {condition}")
+
+            while True:
+                user_input = input(prompt)
+                value = self.shared_data.expr(f'converter(user_input)', user_input=user_input, converter=self.shared_data.expr(converter))
+
+                if self.shared_data.expr(condition, value=value):
+                    break
+                else:
+                    print(condition_desc.format(condition=condition))
+            
+            self.shared_data.write(key, value)
+    
+    def get_node(self, node_id: str):
+        return self.nodes.get(node_id, None)
     
     def prepare(self):
-        '''Prepare the game.'''
+        self.shared_data.script(self.on_load)
         self.get_init_inputs()
-        success = self.run_script(self.onready_script)
-        if not success:
-            exit(1)
+        self.shared_data.script(self.on_ready)
     
     def play(self):
-        '''Play the game.'''
-        while True:
-            self.current_node.full_init()
+        self.prepare()
+        while not ~self.current_node:
+            self.current_node.prepare()
+            print(self.current_node.desc)
 
-            end = self.current_node.end
-            name = self.current_node.name
-            desc = self.current_node.render_description(self.current_node.description)
-            self.log_handler.log("SHOW_NODE", name=name, desc=desc)
-            if end:
-                break
-        
-            options_show_move = self.current_node.show_and_move_options()
-            options_no_move = self.current_node.show_no_move_options()
-            force_move = self.current_node.force_move()
+            force_move = self.current_node.get_force_move()
 
             if force_move:
                 self.current_node = force_move
+                self.shared_data.script(self.on_move)
                 continue
+
+            available_options = self.current_node.options_available()
+            disabled_options = self.current_node.options_disable()
+
+            for i, option in enumerate(available_options):
+                print(f"{i+1} -> {self.shared_data.format_string(option.show_name)} ({self.shared_data.format_string(option.desc)})")
             
-            i = 0
-            for option_name, option_dat in options_show_move.items():
-                option_desc = option_dat.get('desc', '')
-
-                rendered_option_name = self.current_node.render_description(option_name)
-                rendered_option_desc = self.current_node.render_description(option_desc)
-
-                self.log_handler.log("SHOW_OPTION", i=i, option_name=rendered_option_name, option_desc=rendered_option_desc)
-                i += 1
+            for i, option in enumerate(disabled_options):
+                print(f"X -> {self.shared_data.format_string(option.show_name)} ({self.shared_data.format_string(option.desc)}) | {self.shared_data.format_string(option.cant_move_desc)}")
             
-            for option_name, option_dat in options_no_move.items():
-                option_desc = option_dat.get('desc', '')
-                cant_move_desc = option_dat.get('cant_move_desc', '')
+            while True:
+                next_move_input = input(">>> ")
+                if not next_move_input.isdigit():
+                    print("请输入数字")
+                    continue
 
-                rendered_option_name = self.current_node.render_description(option_name)
-                rendered_option_desc = self.current_node.render_description(option_desc)
-                rendered_cant_move_desc = self.current_node.render_description(cant_move_desc)
+                next_move_index = int(next_move_input) - 1
+                if next_move_index < 0 or next_move_index >= len(available_options):
+                    print("请输入正确的数字")
+                    continue
 
-                self.log_handler.log("SHOW_NO_MOVE_OPTION", option_name=rendered_option_name, option_desc=rendered_option_desc, cant_move_desc=rendered_cant_move_desc)
+                break
+
+            next_move_option = available_options[next_move_index]
+            self.current_node = self.current_node >> next_move_option
+            self.shared_data.script(self.on_move)
+            
+            print('\n')
         
-            player_move = self.log_handler.input("NEXT_MOVE_INPUT")
-            if not player_move.isdigit():
-                self.log_handler.log("ERR_INVALID_INPUT", condition_desc="请输入数字")
-                continue
-
-            player_move = int(player_move)
-            if player_move < 0 or player_move >= i:
-                self.log_handler.log("ERR_INVALID_INPUT", condition_desc="请输入正确的数字")
-                continue
-
-            move_option_name = list(options_show_move.keys())[player_move]
-            self.current_node = self.current_node.move(move_option_name)
-
-            self.log_handler.log("NODE_BOUNDARY")
-
-        self.log_handler.log("END_DESC", end_desc=self.current_node.render_description(self.current_node.end_description))
+        end = ~self.current_node
+        print(self.shared_data.format_string(end))
 
 if __name__ == "__main__":
-    files = os.listdir("stories")
-    games = {}
-    for file in files:
-        if file.endswith(".json"):
-            with open(f"stories/{file}", "r") as f:
-                data = json.load(f)
-                game_name = data.get("name", file[:-5])
-                games[game_name] = f"stories/{file}"
-    
-    print("------ 游戏列表 ------")
-    for i, game_name in enumerate(games.keys()):
-        print(f"{i}. {game_name}")
-    print("----------------------")
-
-    game_index = int(input("请选择游戏序号: "))
-    if game_index < 0 or game_index >= len(games):
-        print("无效的游戏序号")
-        exit(1)
-    
-    game_file = games[list(games.keys())[game_index]]
-    game = TextAdventure.from_json(game_file)
-    game.prepare()
-    game.play()
+    with open("game.json", "r") as f:
+        data = json.load(f)
+        game = TextAdventure.from_json_schema(data)
+        game.play()
