@@ -18,16 +18,7 @@ option = Option(game, option_id="...", name="...", next_node_id="...")
 node.add_option(option)
 game.add_node(node)
 
-# 5. 运行游戏或导出游戏
-game.play()
-game.dump("game.pkl") # 导出游戏实例，适合制作好游戏后转发给别人
-```
-
-注：恢复游戏时，需要先加载游戏实例，然后调用 `play` 方法。
-
-```python
-# 恢复游戏
-game = Game.load("game.pkl")
+# 5. 运行
 game.play()
 ```
 
@@ -55,25 +46,25 @@ game.play()
 
 **A. 表达式环境（只读）**
 - 使用场景：`set_data` 的值、`move_condition`、`show_condition`、`defaults` 的 `condition`
-- 访问方式：**直接变量名**（如 `hp`, `gold &gt;= 100`, `job == 1`）
+- 访问方式：**直接变量名**（如 `hp`, `gold >= 100`, `job == 1`）
 - 限制：只读，不能赋值
 
 ```python
 # 正确
 set_data={"gold": "gold + 50", "hp": "min(hp + 10, max_hp)"}
-move_condition="level &gt;= 2 and has_key"
+move_condition="level >= 2 and has_key"
 show_condition="job == 1"  # 只有战士可见
 ```
 
 **B. 脚本环境（读写）**
 - 使用场景：`on_load`, `on_ready`, `on_move`
-- 读取：**直接变量名**（如 `if hp &gt; max_hp:`）
+- 读取：**直接变量名**（如 `if hp > max_hp:`）
 - 写入：**必须通过 data 对象**（如 `data['hp'] = 100`）
 
 ```python
 # 正确
 on_ready=""
-if hp &gt; max_hp:
+if hp > max_hp:
     data['hp'] = max_hp  # 写操作必须带 data[]
 print(f"当前HP: {hp}")     # 读操作直接用变量名
 ""
@@ -96,7 +87,7 @@ Node(
     init_data={"hp": "100"},      # 初始化数据（首次有效）
     set_data={"gold": "50"},      # 强制设置数据（每次覆盖）
     defaults=[                    # 默认跳转（无条件选项时）
-        {"condition": "hp &lt;= 0", "node_id": "game_over"},
+        {"condition": "hp <= 0", "node_id": "game_over"},
         {"condition": "True", "node_id": "next"}  # else 分支
     ],
     end_desc="游戏结束文本",      # 结局文本（设置此字段则为结局节点）
@@ -115,7 +106,7 @@ Option(
     name="战斗",                  # 显示文本
     desc="与怪物战斗",            # 描述
     next_node_id="battle_room",   # 目标节点ID
-    move_condition="hp &gt;= 20",    # 可点击条件（表达式，直接变量名）
+    move_condition="hp >= 20",    # 可点击条件（表达式，直接变量名）
     show_condition="has_sword",   # 显示条件（表达式，直接变量名）
     cant_move_desc="HP不足"       # 不满足 move_condition 时的提示
 )
@@ -136,7 +127,7 @@ Game(
             "prompt": "请输入姓名：",
             "name": "player_name",      # 变量名
             "converter": "str",         # 转换函数（str/int/float）
-            "condition": "len(val) &gt; 0", # 验证条件（val 是用户输入）
+            "condition": "len(val) > 0", # 验证条件（val 是用户输入）
             "err_desc": "不能为空"
         },
         {
@@ -168,9 +159,9 @@ max_hp = getattr(data, 'max_hp', 100)
 ```
 
 ### 陷阱2：表达式中用了 data['key']
-**现象**：`move_condition="data['hp'] &gt; 0"` 报错 "name 'data' is not defined"
+**现象**：`move_condition="data['hp'] > 0"` 报错 "name 'data' is not defined"
 
-**解决**：表达式环境**没有 data 变量**，直接用 `hp &gt; 0`
+**解决**：表达式环境**没有 data 变量**，直接用 `hp > 0`
 
 ### 陷阱3：脚本中赋值未用 data[]
 **现象**：`on_ready="hp = 100"` 后 HP 没变
@@ -204,7 +195,7 @@ game = Game(
     game_name="测试游戏",
     init_input=[
         {"prompt": "姓名：", "name": "name", "converter": "str", 
-         "condition": "len(val) &gt; 0", "err_desc": "不能为空"}
+         "condition": "len(val) > 0", "err_desc": "不能为空"}
     ]
 )
 
@@ -218,12 +209,12 @@ start = Node(
     on_ready="print('游戏开始！')"
 )
 
-# 商店选项（需要金币&gt;=5）
+# 商店选项（需要金币>=5）
 shop_op = Option(
     game=game,
     option_id="shop",
     name="去商店",
-    move_condition="gold &gt;= 5",      # 直接变量名
+    move_condition="gold >= 5",      # 直接变量名
     next_node_id="shop"
 )
 
