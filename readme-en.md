@@ -33,7 +33,11 @@ Includes:
 ## Installation
 
 ```bash
-python game.py                   # Run demo
+git clone https://github.com/baosh/TextAdventure.git
+# You can now run the demos we provided
+cd TextAdventure
+python hotel_detective-en.py
+python deep_awaken-en.py
 ```
 
 Python version requirement: 3.8+

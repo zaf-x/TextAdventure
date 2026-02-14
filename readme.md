@@ -36,7 +36,11 @@
 ## 安装
 
 ```bash
-python game.py                   # 运行示例
+git clone https://github.com/baosh/TextAdventure.git
+# 您可以直接运行示例游戏
+cd TextAdventure
+python hotel_detective.py
+python deep_awaken.py
 ```
 
 Python 版本要求：3.8+
