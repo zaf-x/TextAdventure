@@ -1,4 +1,5 @@
 SAFE_BUILTINS = {
+    "__builtins__": {
     # 类型转换
     "int": int,
     "float": float,
@@ -42,7 +43,7 @@ SAFE_BUILTINS = {
     
     # 数学模块（可选）
     "__import__": None,  # 需要限制，见下方
-}
+}}
 
 SAFE_MODULES = [
     "math",
@@ -63,24 +64,4 @@ def import_safe(name, globals=None, locals=None, fromlist=(), level=0):
         print(f"警告：尝试导入不安全模块，已终止剧本 {name}")
         exit(1)
     
-SAFE_BUILTINS["__import__"] = import_safe
-
-MESSAGE_IDS = {
-    "ERR_INVALID_INPUT": "[错误: 输入值不符合要求 {condition_desc}]",
-    "ERR_SCRIPT_ERROR": "[错误: 执行剧本脚本时出错 {e} {script_desc}]",
-    "ERR_INVALID_NODE": "[错误: 节点 {node_id} 不存在]",
-    "ERR_INVALID_CONDITION": "[错误: 条件表达式 {condition} 无效]",
-    "ERR_NAME": "[错误: 变量名 {name} 无效或不存在]",
-    "ERR_INVALID_IMPORT": "[错误: 导入模块 {module_name} 无效]",
-    "DUMP_CURRENT_NODE": "[信息: 当前节点已转储到 {filename}]",
-    "INPUT": "{prompt}",
-    "INPUT_INIT_BEGIN": "[信息: 初始化输入开始]",
-    "INPUT_INIT_BOUNDARY": "\n",
-    "INPUT_INIT_END": "[信息: 初始化输入结束]",
-    "SHOW_OPTION": "{i}. {option_name} ({option_desc})",
-    "SHOW_NO_MOVE_OPTION": "X {option_name} ({option_desc}) | {cant_move_desc}",
-    "NEXT_MOVE_INPUT": "请选择 > ",
-    "SHOW_NODE": "【{name}】\n\n{desc}",
-    "END_DESC": "结局：\n {end_desc}",
-    "NODE_BOUNDARY": "\n\n"
-}
+SAFE_BUILTINS["__builtins__"]["__import__"] = import_safe

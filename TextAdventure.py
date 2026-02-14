@@ -1,333 +1,520 @@
 import json
+import pickle
 from consts import SAFE_BUILTINS
 
 class Node:
-    def __init__(self, game: 'TextAdventure', node_id: str, name: str, desc: str, end_desc: str = '', set_sd: dict = None, init_sd: dict = None, options: list['Option'] = None, force_move: list[dict] = [], on_load: str = '', on_ready: str = '', on_move: str = ''):
-        self.game = game
-        self.shared_data: SharedData = self.game.shared_data
+    def __init__(self, game: 'Game', node_id: str = "", name: str = "", 
+                 desc: str = "", options: list['Option'] | None = None, 
+                 set_data: dict | None = None,
+                 init_data: dict | None = None, defaults: list[dict[str, any]] | None = None,
+                 end_desc: str = "", on_load: str = "", on_ready: str = "", on_move: str = ""):
         
+        '''初始化节点
+        Args:
+            game: 游戏实例
+            node_id: 节点ID
+            name: 节点名称
+            desc: 节点描述
+            options: 选项列表
+            init_data: 初始化数据
+            defaults: 默认选项
+            end_desc: 结局描述
+            on_load: 加载时执行的脚本
+            on_ready: 就绪时执行的脚本
+            on_move: 移动时执行的脚本
+        '''
+
+        self.game = game
+        self.shared_data: 'Data' = self.game.shared_data
+
         self.node_id = node_id
         self.name = name
         self.desc = desc
-        self.end_desc = end_desc
+        self.set_data = set_data or {}
         self.options = options or []
+        self.init_data = init_data or {}
+        self.end_desc = end_desc
+        self.defaults = defaults or []
         self.on_load = on_load
         self.on_ready = on_ready
         self.on_move = on_move
-        self.force_move = force_move
-
-        self.set_sd = set_sd or {}
-        self.init_sd = init_sd or {}
     
-    def get_option_list(self):
-        return [option.to_json_schema() for option in self.options]
+    # 选项操作
+    def add_option(self, option: 'Option'):
+        '''添加选项
+        Args:
+            option: 选项实例
+        '''
+        self.options.append(option)
     
-    def get_force_move(self):
-        for move in self.force_move:
-            condition = move.get("condition", "True")
-            if self.shared_data.expr(condition):
-                return self.game.get_node(move["node_id"])
+    def get_option_by_id(self, option_id: str) -> 'Option':
+        '''根据ID获取选项
+        Args:
+            option_id: 选项ID
+        Returns:
+            选项实例
+        '''
+        for option in self.options:
+            if option.option_id == option_id:
+                return option
         return None
 
-    def set_shared_data(self):
-        for key, value in self.set_sd.items():
-            self.shared_data.write(key, self.shared_data.expr(value))
+    def del_option(self, option: 'Option'):
+        '''删除选项
+        Args:
+            option: 选项实例
+        '''
+        self.options.remove(option)
     
-    def init_shared_data(self):
-        for key, value in self.init_sd.items():
-            if key not in self.shared_data:
-                self.shared_data.write(key, self.shared_data.expr(value))
+    def del_option_by_id(self, option_id: str):
+        '''删除选项
+        Args:
+            option_id: 选项ID
+        '''
+        self.options = [option for option in self.options if option.option_id != option_id]
     
-    def options_can_show(self):
-        return [option for option in self.options if option.can_show()]
+    def del_option_by_name(self, option_name: str):
+        '''删除选项
+        Args:
+            option_name: 选项名称
+        '''
+        self.options = [option for option in self.options if option.name != option_name]
+    
+    def del_option_by_map(self, omap: callable):
+        '''删除选项
 
-    def options_can_move(self):
+        Args:
+            omap: 选项映射函数，返回True则删除
+        '''
+        self.options = [option for option in self.options if not omap(option)]
+    
+    def add_set_data(self, var, expr: str):
+        '''添加或设置数据
+        Args:
+            var: 变量名
+            expr: 变量值表达式
+        '''
+        self.set_data[var] = expr
+    
+    def del_set_data(self, var):
+        '''删除数据
+        Args:
+            var: 变量名
+        '''
+        del self.set_data[var]
+    
+    def add_init_data(self, var, expr: str):
+        '''添加或设置初始化数据
+        Args:
+            var: 变量名
+            expr: 变量值表达式
+        '''
+        self.init_data[var] = expr
+    
+    def del_init_data(self, var):
+        '''删除初始化数据
+        Args:
+            var: 变量名
+        '''
+        del self.init_data[var]
+    
+    def add_default(self, condition: str, node_id: str):
+        '''添加默认选项
+        Args:
+            condition: 条件表达式，返回True则跳转到默认选项
+            node_id: 下一个节点ID
+        '''
+        self.defaults.append({'condition': condition, 'node_id': node_id})
+    
+    def apply_data_change(self):
+        '''应用数据变更
+        '''
+        for var, value in self.init_data.items():
+            if var not in self.shared_data.data:
+                self.shared_data.data[var] = eval(value, SAFE_BUILTINS, self.shared_data.run_env())
+        
+        for var, value in self.set_data.items():
+            self.shared_data.data[var] = eval(value, SAFE_BUILTINS, self.shared_data.run_env())
+    
+    def run_default(self):
+        for default in self.defaults:
+            if eval(default['condition'], SAFE_BUILTINS, self.shared_data.run_env()):
+                return default['node_id']
+        return None
+    
+    def load_onready(self, filename: str):
+        '''加载时执行的脚本
+        Args:
+            filename: 脚本文件名
+        '''
+        with open(filename, 'r') as f:
+            self.on_load = f.read()
+    
+    def load_onready(self, filename: str):
+        '''加载就绪时执行的脚本
+        Args:
+            filename: 脚本文件名
+        '''
+        with open(filename, 'r') as f:
+            self.on_ready = f.read()
+    
+    def load_onmove(self, filename: str):
+        '''移动时执行的脚本
+        Args:
+            filename: 脚本文件名
+        '''
+        with open(filename, 'r') as f:
+            self.on_move = f.read()
+    
+    def load(self):
+        exec(self.on_load, self.shared_data.run_env(this=self, data=self.shared_data))
+        self.apply_data_change()
+        exec(self.on_ready, self.shared_data.run_env(this=self, data=self.shared_data))
+    
+    def run_onmove(self):
+        exec(self.on_move, self.shared_data.run_env(this=self, data=self.shared_data))
+    
+    def available_options(self):
+        '''获取可移动且可显示的选项
+        Returns:
+            可移动且可显示的选项列表
+        '''
+        return [option for option in self.options if option.can_move() and option.can_show()]
+
+    def can_move_options(self):
+        '''获取可移动的选项
+        Returns:
+            可移动的选项列表
+        '''
         return [option for option in self.options if option.can_move()]
-    
-    def options_available(self):
-        return [option for option in self.options_can_show() if option.can_move()]
-    
-    def options_disable(self):
-        return [option for option in self.options_can_show() if not option.can_move()]
 
-    def prepare(self):
-        self.game.shared_data.script(self.on_load)
-        self.init_shared_data()
-        self.set_shared_data()
-        self.game.shared_data.script(self.on_ready)
+    def can_show_options(self):
+        '''获取可显示的选项
+        Returns:
+            可显示的选项列表
+        '''
+        return [option for option in self.options if option.can_show()]
     
-    def to_json_schema(self):
-        return {
-            self.node_id: {
-                "name": self.name,
-                "desc": self.desc,
-                "end_desc": self.end_desc,
-                "set_sd": self.set_sd,
-                "init_sd": self.init_sd,
-                "options": self.get_option_list(),
-                "on_load": self.on_load,
-                "on_ready": self.on_ready,
-                "on_move": self.on_move,
-                "force_move": self.force_move,
-            }
-        }
+    def disabled_options(self):
+        return [x for x in self.can_show_options() if not x.can_move()]
+    
+    def move(self, option_id: str):
+        '''移动到下一个节点
+        Args:
+            option_id: 选项ID
+        '''
 
-    def __rshift__(self, option: 'Option'):
-        return option.move()
+        self.run_onmove()
+        for option in self.options:
+            if option.option_id == option_id:
+                if option.can_move():
+                    return option.move()
+        return None
     
-    def __invert__(self):
-        return self.end_desc
-    
-class SharedData:
-    def __init__(self, data: dict = None):
-        self.data = data or {}
-    
-    def write(self, key: str, value):
-        self.data[key] = value
-    
-    def read(self, key: str):
-        return self.data.get(key, None)
-    
-    def get(self, key: str, default=None):
-        return self.data.get(key, default)
-
-    def get_script_run_env(self, addition: dict = {}):
-        return {
-            "globals": {
-                "__builtins__": SAFE_BUILTINS,
-                "shared_data": self,
-                **addition,
-            }, 
-            "locals": {},
-        }
-
-    def expr(self, expr: str, **addition):
-        renv = self.get_script_run_env(addition)
-        return eval(expr, renv["globals"], renv["locals"])
-
-    def script(self, script: str, **addition):
-        renv = self.get_script_run_env(addition)
-        exec(script, renv["globals"], renv["locals"])
-    
-    def format_string(self, s: str, **addition):
-        return s.format(**self.data, **addition)
-    
-    def __getitem__(self, key: str):
-        return self.read(key)
-    
-    def __setitem__(self, key: str, value):
-        self.write(key, value)
-    
-    def __contains__(self, key: str):
-        return key in self.data
+    def is_end(self):
+        '''判断是否为结局节点
+        Returns:
+            是否为结局节点
+        '''
+        return bool(self.end_desc)
 
 class Option:
-    def __init__(self, game: 'TextAdventure', option_id: str, show_name: str, desc: str, next_node: 'Node', show_condition: str = 'True', move_condition: str = 'True', cant_move_desc: str = "（无法移动）"):
+    def __init__(self, game: 'Game', option_id: str = "", name: str = "", 
+                 desc: str = "", move_condition: str = "True", 
+                 show_condition: str = "True", next_node_id: str = "start",
+                 cant_move_desc: str = ""):
+        
+        '''初始化选项
+        Args:
+            game: 游戏实例
+            option_id: 选项ID
+            name: 选项名称
+            desc: 选项描述
+            condition: 可移动的条件表达式，返回True则可移动
+            show_condition: 显示条件表达式，返回True则显示选项
+            next_node_id: 下一个节点ID
+        '''
+
         self.game = game
-        self.shared_data: SharedData = self.game.shared_data
-        self.option_id = option_id
-        self.show_name = show_name
-        self.desc = desc
-        self.next_node = next_node
-        self.show_condition = show_condition
-        self.move_condition = move_condition
-
+        self.nodes = game.nodes
+        self.shared_data: Data = game.shared_data
         self.cant_move_desc = cant_move_desc
-    
-    def to_json_schema(self):
-        return {
-            self.option_id: {
-                "show_name": self.show_name,
-                "desc": self.desc,
-                "next_node": self.next_node.node_id,
-                "show_condition": self.show_condition,
-                "move_condition": self.move_condition,
-                "cant_move_desc": self.cant_move_desc,
-            }
-        }
-    
-    @classmethod
-    def from_json_schema(cls, data: dict, game: 'TextAdventure'):
-        option_id = list(data.keys())[0]
-        option_data = data[option_id]
 
-        return Option(
-            game=game,
-            option_id=option_id,
-            show_name=option_data["show_name"],
-            desc=option_data["desc"],
-            next_node=game.nodes[option_data["next_node"]],
-            show_condition=option_data["show_condition"],
-            move_condition=option_data["move_condition"],
-            cant_move_desc=option_data["cant_move_desc"],
-        )
-    
-    def can_show(self):
-        return self.shared_data.expr(self.show_condition)
+        self.option_id = option_id
+        self.name = name
+        self.desc = desc
+        self.move_condition = move_condition
+        self.show_condition = show_condition
+        self.next_node_id = next_node_id
     
     def can_move(self):
-        return self.shared_data.expr(self.move_condition)
+        '''判断是否可移动
+        Returns:
+            是否可移动
+        '''
+        return eval(self.move_condition, SAFE_BUILTINS, self.shared_data.run_env())
+
+    def can_show(self):
+        '''判断是否可显示
+        Returns:
+            是否可显示
+        '''
+        return eval(self.show_condition, SAFE_BUILTINS, self.shared_data.run_env())
     
     def move(self):
-        if self.can_move():
-            return self.next_node
-        else:
-            return None
-    
-    def __bool__(self):
-        return self.can_move()
+        '''移动到下一个节点
+        Returns:
+            下一个节点实例
+        '''
+        return self.nodes[self.next_node_id]
 
-class TextAdventure:
-    def __init__(self, game_name: str, start_node_id: str, init_inputs: dict = None, nodes: dict[str, Node] = None, on_load: str = '', on_ready: str = '', on_move: str = ''):
-        self.game_name = game_name
-        self.nodes = nodes or {}
-        self.init_inputs = init_inputs or {}
+class Data:
+    def __init__(self):
+        self.data = {}
+    
+    def run_env(self, **kwargs):
+        '''运行环境
+        Args:
+            kwargs: 环境变量
+        '''
+        return {**self.data, **kwargs}
+    
+    def format_string(self, s: str, **kwargs):
+        '''格式化字符串
+        Args:
+            s: 字符串
+            kwargs: 格式化变量
+        Returns:
+            格式化后的字符串
+        '''
+        return s.format(**self.data, **kwargs)
+
+    def __getitem__(self, key):
+        return self.data[key]
+
+    def __setitem__(self, key, value):
+        self.data[key] = value
+    
+    def get_attr(self, name):
+        '''获取属性
+        Args:
+            name: 属性名
+        Returns:
+            属性值
+        '''
+        return self.data.get(name, None)
+
+    def __getattribute__(self, name):
+        if name == "data":
+            return super().__getattribute__(name)
+        # Safely check if data attribute exists before accessing it
+        try:
+            data_dict = super().__getattribute__("data")
+            if isinstance(data_dict, dict) and name in data_dict:
+                return data_dict[name]
+        except AttributeError:
+            pass
+        return super().__getattribute__(name)
+    
+    def __contains__(self, key):
+        return key in self.data
+    
+    def __setattr__(self, name, value):
+        # Check if data attribute exists before trying to access it
+        try:
+            if hasattr(self, 'data') and isinstance(self.data, dict) and name in self.data:
+                self.data[name] = value
+            else:
+                super().__setattr__(name, value)
+        except AttributeError:
+            super().__setattr__(name, value)
+
+class IOHandler:
+    def __init__(self, shared_data: 'Data'):
+        self.shared_data = shared_data
+    
+    def show_end(self, node: 'Node'):
+        '''显示结局节点
+        Args:
+            node: 节点实例
+        '''
+        print(f"{self.shared_data.format_string(node.name)}\n\n{self.shared_data.format_string(node.end_desc)}")
+    
+    def show_node(self, node: 'Node'):
+        '''显示节点
+        Args:
+            node: 节点实例
+        '''
+        print(f"{self.shared_data.format_string(node.name)}\n\n{self.shared_data.format_string(node.desc)}")
+    
+    def show_options(self, ava_op: list['Option'], dis_op: list['Option']):
+        '''显示选项
+        Args:
+            ava_op: 可移动选项列表
+            dis_op: 不可移动选项列表
+        '''
+        print("可移动选项：")
+        for i, option in enumerate(ava_op):
+            print(f"{i}: {self.shared_data.format_string(option.name)} ({self.shared_data.format_string(option.desc)})")
+
+        if dis_op:
+            print("\n不可移动选项：")
+            for i, option in enumerate(dis_op):
+                print(f"X {i}: {self.shared_data.format_string(option.name)} ({self.shared_data.format_string(option.desc)}) | {self.shared_data.format_string(option.cant_move_desc)}")
+
+        choice = input("> ")
+
+        while not choice.isdigit() or int(choice) < 0 or int(choice) >= len(ava_op):
+            print("输入错误，请重新输入")
+            choice = input("> ")
+        
+        return ava_op[int(choice)]
+    
+    def get_init_input_start(self):
+        print("#" * 20, "角色创建", "#" * 20)
+    
+    def init_input_boundary(self):
+        print()
+    
+    def get_init_input_end(self):
+        print("#" * 20, "角色创建完成", "#" * 20)
+    
+    def get_init_input(self, prompt: str):
+        '''获取初始化输入
+        Args:
+            prompt: 提示信息
+        Returns:
+            输入值
+        '''
+        return input(self.shared_data.format_string(prompt))
+    
+    def show_init_input_error(self, err_desc: str, user_input: str):
+        '''显示初始化输入错误
+        Args:
+            err_desc: 错误描述
+            user_input: 用户输入值
+        '''
+        print(f"输入错误：{self.shared_data.format_string(err_desc)}，请重新输入")
+    
+class Game:
+    def __init__(self, start_node_id: str = "start", game_name: str = "TextAdventure", init_input: list[dict] | None = None, io_handler: 'IOHandler' = None):
+        self.shared_data = Data()
+        self.io_handler = io_handler if io_handler else IOHandler(self.shared_data)
         self.start_node_id = start_node_id
-        self.shared_data = SharedData()
+        self.game_name = game_name
+        self.nodes: dict[str, 'Node'] = {}
 
-        self.on_load = on_load
-        self.on_ready = on_ready
-        self.on_move = on_move
+        self.current_node: 'Node' | None = None
 
-        self.current_node: Node = self.nodes[self.start_node_id]
+        self.init_input = init_input or []
     
-    @classmethod
-    def from_json_schema(cls, data: dict):
-        game = cls.__new__(cls)
-        game.shared_data = SharedData()
-        game.nodes = {}
-        
-        # ========== 阶段 1：创建所有裸 Node ==========
-        for node_id in data["nodes"].keys():
-            game.nodes[node_id] = Node.__new__(Node)
-        
-        # ========== 阶段 2：初始化所有 Node（填充 options）==========
-        for node_id, node_obj in game.nodes.items():
-            node_data = data["nodes"][node_id]
-            
-            # 先收集 options 数据，但不创建 Option（需要所有 Node 就绪）
-            options_data = node_data.get("options", [])
-            
-            # 初始化 Node（除了 options）
-            node_obj.game = game
-            node_obj.shared_data = game.shared_data
-            node_obj.node_id = node_id
-            node_obj.name = node_data["name"]
-            node_obj.desc = node_data["desc"]
-            node_obj.end_desc = node_data.get("end_desc", "")
-            node_obj.set_sd = node_data.get("set_sd", {})
-            node_obj.init_sd = node_data.get("init_sd", {})
-            node_obj.force_move = node_data.get("force_move", [])
-            node_obj.on_load = node_data.get("on_load", "")
-            node_obj.on_ready = node_data.get("on_ready", "")
-            node_obj.on_move = node_data.get("on_move", "")
-            node_obj.options = []  # 先空着
-        
-        # ========== 阶段 3：创建所有 Option（现在所有 Node 都已就绪）==========
-        for node_id, node_obj in game.nodes.items():
-            node_data = data["nodes"][node_id]
-            options_data = node_data.get("options", [])
-            
-            for opt_data in options_data:
-                opt_id = list(opt_data.keys())[0]
-                opt_info = opt_data[opt_id]
-                
-                option = Option(
-                    game=game,
-                    option_id=opt_id,
-                    show_name=opt_info["show_name"],
-                    desc=opt_info["desc"],
-                    next_node=game.nodes[opt_info["next_node"]],
-                    show_condition=opt_info.get("show_condition", "True"),
-                    move_condition=opt_info.get("move_condition", "True"),
-                    cant_move_desc=opt_info.get("cant_move_desc", "（无法移动）"),
-                )
-                node_obj.options.append(option)
-        
-        # ========== 阶段 4：初始化 Game ==========
-        game.game_name = data["game_name"]
-        game.start_node_id = data["start_node_id"]
-        game.init_inputs = data.get("init_inputs", {})
-        game.on_load = data.get("on_load", "")
-        game.on_ready = data.get("on_ready", "")
-        game.on_move = data.get("on_move", "")
-        game.current_node = game.nodes[game.start_node_id]
-        
-        return game
+    def add_node(self, node: 'Node'):
+        '''添加节点
+        Args:
+            node: 节点实例
+        '''
+        self.nodes[node.node_id] = node
+    
+    def remove_node(self, node: 'Node'):
+        '''移除节点
+        Args:
+            node: 节点实例
+        '''
+        del self.nodes[node.node_id]
+    
+    def remove_node_by_id(self, node_id: str):
+        '''移除节点
+        Args:
+            node_id: 节点ID
+        '''
+        del self.nodes[node_id]
+    
+    def add_init_input(self, prompt: str, name: str, converter: str, condition: str, err_desc: str):
+        '''添加初始化输入
+        Args:
+            prompt: 提示信息
+            name: 变量名
+            converter: 转换函数名
+            condition: 条件表达式
+            err_desc: 错误描述
+        '''
+        self.init_input.append({"prompt": prompt, "name": name, "converter": converter, "condition": condition, "err_desc": err_desc})
+    
+    def remove_init_input_by_name(self, name: str):
+        '''移除初始化输入
+        Args:
+            name: 变量名
+        '''
+        for init_input in self.init_input:
+            if init_input["name"] == name:
+                self.init_input.remove(init_input)
+                break
     
     def get_init_inputs(self):
-        for key, data in self.init_inputs.items():
-            prompt = data.get("prompt", f"请输入 {key}：")
-
-            converter = data.get("converter", 'str')
-            condition = data.get("condition", 'True')
-            condition_desc = data.get("condition_desc", f"输入值不符合要求 {condition}")
+        '''获取初始化输入
+        '''
+        for init_input in self.init_input:
+            prompt = init_input["prompt"]
+            name = init_input["name"]
+            converter = init_input["converter"]
+            callable_converter = eval(converter, SAFE_BUILTINS, self.shared_data.run_env())
+            condition = init_input["condition"]
+            err_desc = init_input["err_desc"]
 
             while True:
-                user_input = input(prompt)
-                value = self.shared_data.expr(f'converter(user_input)', user_input=user_input, converter=self.shared_data.expr(converter))
-
-                if self.shared_data.expr(condition, value=value):
-                    break
-                else:
-                    print(condition_desc.format(condition=condition))
-            
-            self.shared_data.write(key, value)
-    
-    def get_node(self, node_id: str):
-        return self.nodes.get(node_id, None)
-    
-    def prepare(self):
-        self.shared_data.script(self.on_load)
-        self.get_init_inputs()
-        self.shared_data.script(self.on_ready)
+                user_input = self.io_handler.get_init_input(prompt)
+                try:
+                    val = callable_converter(user_input)
+                except ValueError:
+                    self.io_handler.show_init_input_error(err_desc, user_input)
+                    continue
+                
+                if not eval(condition, SAFE_BUILTINS, {"val": val}):
+                    self.io_handler.show_init_input_error(err_desc, user_input)
+                    continue
+                
+                self.shared_data[name] = val
+                break
     
     def play(self):
-        self.prepare()
-        while not ~self.current_node:
-            self.current_node.prepare()
-            print(self.current_node.desc)
+        self.io_handler.get_init_input_start()
+        self.get_init_inputs()
+        self.io_handler.get_init_input_end()
 
-            force_move = self.current_node.get_force_move()
+        self.current_node = self.nodes[self.start_node_id]
 
-            if force_move:
-                self.current_node = force_move
-                self.shared_data.script(self.on_move)
+        while not self.current_node.is_end():
+            self.current_node.load()
+            self.io_handler.show_node(self.current_node)
+            default = self.current_node.run_default()
+
+            if default:
+                self.current_node = self.nodes[default]
                 continue
 
-            available_options = self.current_node.options_available()
-            disabled_options = self.current_node.options_disable()
+            ava_op = self.current_node.available_options()
+            dis_op = self.current_node.disabled_options()
 
-            for i, option in enumerate(available_options):
-                print(f"{i+1} -> {self.shared_data.format_string(option.show_name)} ({self.shared_data.format_string(option.desc)})")
-            
-            for i, option in enumerate(disabled_options):
-                print(f"X -> {self.shared_data.format_string(option.show_name)} ({self.shared_data.format_string(option.desc)}) | {self.shared_data.format_string(option.cant_move_desc)}")
-            
-            while True:
-                next_move_input = input(">>> ")
-                if not next_move_input.isdigit():
-                    print("请输入数字")
-                    continue
+            option = self.io_handler.show_options(ava_op, dis_op)
 
-                next_move_index = int(next_move_input) - 1
-                if next_move_index < 0 or next_move_index >= len(available_options):
-                    print("请输入正确的数字")
-                    continue
-
-                break
-
-            next_move_option = available_options[next_move_index]
-            self.current_node = self.current_node >> next_move_option
-            self.shared_data.script(self.on_move)
-            
-            print('\n')
+            if option:
+                self.current_node = self.nodes[option.next_node_id]
+            else:
+                print("选项不存在")
         
-        end = ~self.current_node
-        print(self.shared_data.format_string(end))
-
-if __name__ == "__main__":
-    with open("game.json", "r") as f:
-        data = json.load(f)
-        game = TextAdventure.from_json_schema(data)
-        game.play()
+        self.current_node.load()
+        self.io_handler.show_end(self.current_node)
+    
+    def dump(self, file: str):
+        '''导出数据
+        '''
+        with open(file, "wb") as f:
+            pickle.dump(self, f)
+    
+    @classmethod
+    def load(cls, file: str):
+        '''导入数据
+        '''
+        with open(file, "rb") as f:
+            game = pickle.load(f)
+            return game

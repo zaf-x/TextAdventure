@@ -1,124 +1,83 @@
-TextAdventure
+# TextAdventure
 
-[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+基于 Python 的文本冒险游戏引擎。无需编写复杂代码，通过节点和选项即可构建多分支剧情、角色属性系统、条件判断和多重结局。
 
-一个基于 Python 的文字冒险游戏引擎，使用 JSON 定义剧本，支持变量系统、条件分支、Python 脚本和初始化输入。
+## 功能特性
 
-[English](#english) | [中文](#中文)
+- **可视化剧情结构** - 使用 Node（节点）和 Option（选项）组织剧情，天然支持多分支
+- **数据驱动系统** - 内置变量系统，支持角色属性、物品、好感度等任意数值
+- **条件控制** - 选项可根据条件显示/禁用，支持复杂逻辑（如"需要钥匙且等级≥5"）
+- **角色创建** - 内置输入验证系统，支持游戏开始时的角色定制
+- **存档分享** - 游戏可导出为单文件，方便分享给朋友或保存进度
+- **安全执行** - 游戏逻辑在受限环境中运行，无需担心代码注入
 
----
+## 一分钟上手
 
-## 中文
+```python
+from TextAdventure import Game, Node, Option
 
-### 特性
+game = Game(start_node_id="start", game_name="Demo")
 
-- 🎮 **纯文本驱动** - 使用 JSON 编写游戏剧本，无需编程基础
-- 🧮 **变量系统** - 支持全局变量、条件判断和动态计算
-- 🐍 **Python 脚本** - 可在节点中执行 Python 代码（安全沙箱）
-- 🎯 **条件分支** - 选项可根据条件显示或禁用
-- 💾 **存档系统** - 支持 pickle 序列化保存进度
-- 🎨 **文本渲染** - 支持变量插值和表达式计算
+start = Node(game, "start", "城堡入口", "你站在古老城堡前。")
+inside = Node(game, "inside", "大厅", "大厅阴森恐怖。", end_desc="游戏结束")
 
-### 快速开始
+enter = Option(game, "enter", "进入城堡", next_node_id="inside")
 
-```bash
-# 克隆仓库
-git clone https://github.com/BaoShuWen/TextAdventure.git
-cd TextAdventure
+start.add_option(enter)
+game.add_node(start)
+game.add_node(inside)
 
-# 运行示例
-python TextAdventure.py
+game.play()
 ```
 
-### 项目结构
+## 完整文档
+
+**[查看详细制作指南 →](story_doc.md)**
+
+包含：
+- 完整的 API 参考
+- 变量访问规则（重要）
+- 条件表达式写法
+- 节点数据执行顺序
+- 常见陷阱与解决方案
+- 完整示例代码
+
+## 安装
+
+```bash
+python game.py                   # 运行示例
+```
+
+Python 版本要求：3.8+
+
+## 快速制作游戏
+
+1. 创建 `my_game.py`
+2. 导入 `TextAdventure` 模块
+3. 定义节点和选项（参考上方示例或详细文档）
+4. 运行 `python my_game.py`
+
+**分享游戏**：
+```python
+# 制作完成后导出
+game.dump("my_game.pkl")
+
+# 玩家加载运行
+game = Game.load("my_game.pkl")
+game.play()
+```
+
+## 项目结构
 
 ```
 TextAdventure/
-├── TextAdventure.py      # 主程序
-├── consts.py             # 常量配置（安全内置函数、消息模板）
-├── stories/              # 游戏剧本目录
-│   └── test.json         # 示例剧本
-├── saves/                # 存档目录（自动生成）
-└── README.md             # 本文件
+├── TextAdventure.py    # 游戏引擎（无需修改）
+├── consts.py           # 安全执行环境配置
+├── story_doc.md        # 详细制作文档
+├── gen.py              # 简单示例
+└── game.py             # 完整功能演示
 ```
 
-### 示例剧本
+## License
 
-```json
-{
-  "name": "古堡探险",
-  "start_node": "entrance",
-  "shared_data": {
-    "hp": 100,
-    "gold": 0
-  },
-  "nodes": {
-    "entrance": {
-      "name": "古堡大门",
-      "description": "你站在一座阴森的古堡前，生命值: {hp}",
-      "options": {
-        "进入大门": {
-          "desc": "推开沉重的铁门",
-          "next_node": "hall",
-          "move_condition": "hp > 0"
-        }
-      }
-    }
-  }
-}
-```
-
-### 完整文档
-
-详见 [story_doc.md](./story_doc.md)
-
----
-
-## English
-
-### Features
-
-- 🎮 **Text-Driven** - Write game scripts in JSON, no programming required
-- 🧮 **Variable System** - Global variables, conditions and dynamic calculations
-- 🐍 **Python Scripts** - Execute Python code in nodes (safe sandbox)
-- 🎯 **Conditional Branching** - Show/disable options based on conditions
-- 💾 **Save System** - Pickle serialization for progress saving
-- 🎨 **Text Rendering** - Variable interpolation and expression evaluation
-
-### Quick Start
-
-```bash
-git clone https://github.com/BaoShuWen/TextAdventure.git
-cd TextAdventure
-python TextAdventure.py
-```
-
-### Documentation
-
-See [story_doc.md](./story_doc.md) for full documentation (Chinese only for now).
-
----
-
-## 技术细节 / Technical Details
-
-### 安全机制
-
-- Python 脚本运行在受限环境中
-- 仅允许白名单内置函数和模块（`math`, `random`, `datetime` 等）
-- 文件系统访问被隔离
-
-### 依赖
-
-- Python 3.8+
-- 无第三方依赖（标准库 only）
-
----
-
-## 贡献 / Contributing
-
-欢迎 Issue 和 PR！
-
-## 许可证 / License
-
-[MIT](./LICENSE)
+MIT License - 可自由用于个人或商业项目。
