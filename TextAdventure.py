@@ -131,15 +131,30 @@ class Node:
         '''
         for var, value in self.init_data.items():
             if var not in self.shared_data.data:
-                self.shared_data.data[var] = eval(value, SAFE_BUILTINS, self.shared_data.run_env())
+                try:
+                    self.shared_data.data[var] = eval(value, SAFE_BUILTINS, self.shared_data.run_env())
+                except Exception as e:
+                    print(f"\n[ERROR] 节点 '{self.node_id}' 的 init_data['{var}'] = '{value}' 执行失败: {e}")
+                    print(f"当前可用变量: {list(self.shared_data.data.keys())}")
+                    raise
         
         for var, value in self.set_data.items():
-            self.shared_data.data[var] = eval(value, SAFE_BUILTINS, self.shared_data.run_env())
+            try:
+                self.shared_data.data[var] = eval(value, SAFE_BUILTINS, self.shared_data.run_env())
+            except Exception as e:
+                print(f"\n[ERROR] 节点 '{self.node_id}' 的 set_data['{var}'] = '{value}' 执行失败: {e}")
+                print(f"当前可用变量: {list(self.shared_data.data.keys())}")
+                raise
     
     def run_default(self):
         for default in self.defaults:
-            if eval(default['condition'], SAFE_BUILTINS, self.shared_data.run_env()):
-                return default['node_id']
+            try:
+                if eval(default['condition'], SAFE_BUILTINS, self.shared_data.run_env()):
+                    return default['node_id']
+            except Exception as e:
+                print(f"\n[ERROR] 节点 '{self.node_id}' 的 defaults condition '{default['condition']}' 执行失败: {e}")
+                print(f"当前可用变量: {list(self.shared_data.data.keys())}")
+                raise
         return None
     
     def load_onload(self, filename: str):
@@ -167,12 +182,24 @@ class Node:
             self.on_move = f.read()
     
     def load(self):
-        exec(self.on_load, self.shared_data.run_env(this=self, data=self.shared_data))
+        try:
+            exec(self.on_load, self.shared_data.run_env(this=self, data=self.shared_data))
+        except Exception as e:
+            print(f"\n[ERROR] 节点 '{self.node_id}' 的 on_load 脚本执行失败: {e}")
+            raise
         self.apply_data_change()
-        exec(self.on_ready, self.shared_data.run_env(this=self, data=self.shared_data))
+        try:
+            exec(self.on_ready, self.shared_data.run_env(this=self, data=self.shared_data))
+        except Exception as e:
+            print(f"\n[ERROR] 节点 '{self.node_id}' 的 on_ready 脚本执行失败: {e}")
+            raise
     
     def run_onmove(self):
-        exec(self.on_move, self.shared_data.run_env(this=self, data=self.shared_data))
+        try:
+            exec(self.on_move, self.shared_data.run_env(this=self, data=self.shared_data))
+        except Exception as e:
+            print(f"\n[ERROR] 节点 '{self.node_id}' 的 on_move 脚本执行失败: {e}")
+            raise
     
     def available_options(self):
         '''获取可移动且可显示的选项
@@ -252,14 +279,28 @@ class Option:
         Returns:
             是否可移动
         '''
-        return eval(self.move_condition, SAFE_BUILTINS, self.shared_data.run_env())
-
+        try:
+            return eval(self.move_condition, SAFE_BUILTINS, self.shared_data.run_env())
+        except Exception as e:
+            print(f"\n[ERROR] 选项 '{self.option_id}' (name: '{self.name}') 的 move_condition 执行失败")
+            print(f"条件表达式: {self.move_condition}")
+            print(f"当前可用变量: {list(self.shared_data.data.keys())}")
+            print(f"错误类型: {type(e).__name__}: {e}")
+            raise
+    
     def can_show(self):
         '''判断是否可显示
         Returns:
             是否可显示
         '''
-        return eval(self.show_condition, SAFE_BUILTINS, self.shared_data.run_env())
+        try:
+            return eval(self.show_condition, SAFE_BUILTINS, self.shared_data.run_env())
+        except Exception as e:
+            print(f"\n[ERROR] 选项 '{self.option_id}' (name: '{self.name}') 的 show_condition 执行失败")
+            print(f"条件表达式: {self.show_condition}")
+            print(f"当前可用变量: {list(self.shared_data.data.keys())}")
+            print(f"错误类型: {type(e).__name__}: {e}")
+            raise
     
     def move(self):
         '''移动到下一个节点
