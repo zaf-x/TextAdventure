@@ -1,6 +1,6 @@
 # TextAdventure
 
-A Python-based text adventure game engine. Build multi-branch narratives, character attribute systems, conditional logic, and multiple endings through nodes and options—no complex coding required.
+A Python-based text adventure game engine. Build multi-branch narratives, character attribute systems, conditional logic, and multiple endings through nodes and options with lite-code.
 
 ## Features
 
