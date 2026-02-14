@@ -13,22 +13,10 @@ A Python-based text adventure game engine. Build multi-branch narratives, charac
 
 ## Quick Start (1 Minute)
 
-```python
-from TextAdventure import Game, Node, Option
+We provide several complete example games, you can directly run them to experience the functionality of the game engine:
 
-game = Game(start_node_id="start", game_name="Demo")
-
-start = Node(game, "start", "Castle Entrance", "You stand before an ancient castle.")
-inside = Node(game, "inside", "Great Hall", "The hall is dark and eerie.", end_desc="Game Over")
-
-enter = Option(game, "enter", "Enter Castle", next_node_id="inside")
-
-start.add_option(enter)
-game.add_node(start)
-game.add_node(inside)
-
-game.play()
-```
+- [Hotel Detective](hotel_detective-en.py)
+- [Deep Awakening](deep_awaken-en.py)
 
 ## Full Documentation
 

@@ -15,22 +15,11 @@
 
 ## 一分钟上手
 
-```python
-from TextAdventure import Game, Node, Option
+我们为您准备了几个个完整的示例游戏，您可以直接运行它们来体验游戏引擎的功能：
 
-game = Game(start_node_id="start", game_name="Demo")
+- [旅馆侦探](hotel_detective.py)
+- [深空觉醒](deep_awaken.py)
 
-start = Node(game, "start", "城堡入口", "你站在古老城堡前。")
-inside = Node(game, "inside", "大厅", "大厅阴森恐怖。", end_desc="游戏结束")
-
-enter = Option(game, "enter", "进入城堡", next_node_id="inside")
-
-start.add_option(enter)
-game.add_node(start)
-game.add_node(inside)
-
-game.play()
-```
 
 ## 完整文档
 
