@@ -338,6 +338,7 @@ class IOHandler:
         Args:
             node: 节点实例
         '''
+        print(f"{self.shared_data.format_string(node.desc)}")
         print(f"{self.shared_data.format_string(node.name)}\n\n{self.shared_data.format_string(node.end_desc)}")
     
     def show_node(self, node: 'Node'):
