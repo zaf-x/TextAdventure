@@ -74,7 +74,6 @@ TextAdventure/
 ├── TextAdventure.py    # 游戏引擎（无需修改）
 ├── consts.py           # 安全执行环境配置
 ├── story_doc.md        # 详细制作文档
-├── gen.py              # 简单示例
 └── game.py             # 完整功能演示
 ```
 
