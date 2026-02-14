@@ -142,7 +142,7 @@ class Node:
                 return default['node_id']
         return None
     
-    def load_onready(self, filename: str):
+    def load_onload(self, filename: str):
         '''加载时执行的脚本
         Args:
             filename: 脚本文件名
