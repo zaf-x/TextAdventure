@@ -101,7 +101,7 @@ try:
     game = Game.load("tmp.game")
     game.play()
 except Exception as e:
-    print(f"[ERROR] Failed to play game: {e}")
+    print(f"[ERROR] Failed to play game: {{e}}")
     print("Abort")
     exit(1)
 finally:

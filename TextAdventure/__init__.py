@@ -1,16 +1,15 @@
 import json
 import pickle
+from typing import Any, Callable, TYPE_CHECKING
 
-try:
-    from consts import SAFE_BUILTINS
-except ImportError as e: # 独立运行时没有consts文件
-    pass
+if TYPE_CHECKING or "SAFE_BUILTINS" not in globals():
+    from .consts import SAFE_BUILTINS
 
 class Node:
     def __init__(self, game: 'Game', node_id: str = "", name: str = "", 
                  desc: str = "", options: list['Option'] | None = None, 
                  set_data: dict | None = None,
-                 init_data: dict | None = None, defaults: list[dict[str, any]] | None = None,
+                 init_data: dict | None = None, defaults: list[dict[str, Any]] | None = None,
                  end_desc: str = "", on_load: str = "", on_ready: str = "", on_move: str = ""):
         
         '''初始化节点
@@ -42,6 +41,8 @@ class Node:
         self.on_load = on_load
         self.on_ready = on_ready
         self.on_move = on_move
+        
+        self.game.add_node(self)
     
     # 选项操作
     def add_option(self, option: 'Option'):
@@ -51,7 +52,7 @@ class Node:
         '''
         self.options.append(option)
     
-    def get_option_by_id(self, option_id: str) -> 'Option':
+    def get_option_by_id(self, option_id: str) -> 'Option | None':
         '''根据ID获取选项
         Args:
             option_id: 选项ID
@@ -84,7 +85,7 @@ class Node:
         '''
         self.options = [option for option in self.options if option.name != option_name]
     
-    def del_option_by_map(self, omap: callable):
+    def del_option_by_map(self, omap: Callable):
         '''删除选项
 
         Args:
@@ -446,14 +447,14 @@ class IOHandler:
         print("\n")
     
 class Game:
-    def __init__(self, start_node_id: str = "start", game_name: str = "TextAdventure", init_input: list[dict] | None = None, io_handler: 'IOHandler' = None):
+    def __init__(self, start_node_id: str = "start", game_name: str = "TextAdventure", init_input: list[dict] | None = None, io_handler: 'IOHandler | None' = None):
         self.shared_data = Data()
         self.io_handler = io_handler if io_handler else IOHandler(self.shared_data)
         self.start_node_id = start_node_id
         self.game_name = game_name
         self.nodes: dict[str, 'Node'] = {}
 
-        self.current_node: 'Node' | None = None
+        self.current_node: 'Node | None' = None
 
         self.init_input = init_input or []
     
