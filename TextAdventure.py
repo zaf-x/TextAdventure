@@ -1,6 +1,10 @@
 import json
 import pickle
-from consts import SAFE_BUILTINS
+
+try:
+    from consts import SAFE_BUILTINS
+except ImportError as e: # 独立运行时没有consts文件
+    pass
 
 class Node:
     def __init__(self, game: 'Game', node_id: str = "", name: str = "", 
@@ -438,6 +442,9 @@ class IOHandler:
         '''
         print(f"输入错误：{self.shared_data.format_string(err_desc)}，请重新输入")
     
+    def node_boundary(self):
+        print("\n")
+    
 class Game:
     def __init__(self, start_node_id: str = "start", game_name: str = "TextAdventure", init_input: list[dict] | None = None, io_handler: 'IOHandler' = None):
         self.shared_data = Data()
@@ -543,6 +550,8 @@ class Game:
                 self.current_node = self.nodes[option.next_node_id]
             else:
                 print("选项不存在")
+            
+            self.io_handler.node_boundary()
         
         self.current_node.load()
         self.io_handler.show_end(self.current_node)

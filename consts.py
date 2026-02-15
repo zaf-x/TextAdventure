@@ -65,3 +65,45 @@ def import_safe(name, globals=None, locals=None, fromlist=(), level=0):
         exit(1)
     
 SAFE_BUILTINS["__builtins__"]["__import__"] = import_safe
+
+STANDALONE_SCRIPT_MOD = """
+'''
+WARNING: This script is created by standalone_script_creator.py.
+Do not modify this file manually.
+modifications may cause unexpected behavior.
+'''
+
+import base64
+import os
+import types
+import sys
+
+TextAdventure = types.ModuleType("TextAdventure")
+sys.modules["TextAdventure"] = TextAdventure
+
+{consts}
+
+{lib_cont}
+
+TextAdventure.Game = Game
+TextAdventure.Node = Node
+TextAdventure.Option = Option
+TextAdventure.Data = Data
+TextAdventure.IOHandler = IOHandler
+TextAdventure.SAFE_BUILTINS = SAFE_BUILTINS
+
+_GAME_DATA = {gamedata}
+
+try:
+    with open("tmp.game", "wb") as f:
+        f.write(base64.b64decode(_GAME_DATA))
+
+    game = Game.load("tmp.game")
+    game.play()
+except Exception as e:
+    print(f"[ERROR] Failed to play game: {e}")
+    print("Abort")
+    exit(1)
+finally:
+    os.remove("tmp.game")
+"""
