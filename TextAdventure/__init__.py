@@ -323,7 +323,7 @@ class Data:
         Args:
             kwargs: 环境变量
         '''
-        return {**self.data, **kwargs}
+        return {**self.data, **kwargs, "Node": Node, "Option": Option, "Game": Game}
     
     def format_string(self, s: str, **kwargs):
         '''格式化字符串
@@ -333,7 +333,7 @@ class Data:
         Returns:
             格式化后的字符串
         '''
-        return s.format(**self.data, **kwargs)
+        return s.format(**self.run_env(**kwargs))
 
     def __getitem__(self, key):
         return self.data[key]
