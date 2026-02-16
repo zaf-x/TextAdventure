@@ -411,9 +411,14 @@ class IOHandler:
 
         choice = input("> ")
 
-        while not choice.isdigit() or int(choice) < 0 or int(choice) >= len(ava_op):
-            print("输入错误，请重新输入")
-            choice = input("> ")
+        while True:
+            if choice == ":":
+                return "BreakToCommand"
+            if not choice.isdigit() or int(choice) < 0 or int(choice) >= len(ava_op):
+                print("输入错误，请重新输入")
+                choice = input("> ")
+                continue
+            break
         
         return ava_op[int(choice)]
     
@@ -445,6 +450,34 @@ class IOHandler:
     
     def node_boundary(self):
         print("\n")
+    
+    def cmdline(self, game: 'Game'):
+        print("你已进入命令行模式")
+        print("可用命令：")
+        print("continue: 返回选项界面")
+        print("pass: 空命令")
+        print("save: 保存")
+        print("load: 从文件加载")
+        while True:
+            cmd = input("> ")
+            if cmd == "continue":
+                break
+            elif cmd == "pass":
+                continue
+            elif cmd == "save":
+                filenm = input("要保存的文件名：")
+                game.dump(filenm)
+
+            elif cmd == "load":
+                filenm = input("要加载的文件名：")
+                game_new = Game.load(filenm)
+                print(f"正在加载游戏 {game.game_name}")
+
+                for property in game.__dict__:
+                    game.__setattr__(property, game_new.__getattribute__(property))
+            else:
+                print("未知命令")
+
     
 class Game:
     def __init__(self, start_node_id: str = "start", game_name: str = "TextAdventure", init_input: list[dict] | None = None, io_handler: 'IOHandler | None' = None):
@@ -548,7 +581,10 @@ class Game:
             option = self.io_handler.show_options(ava_op, dis_op)
 
             if option:
-                self.current_node = self.nodes[option.next_node_id]
+                if option == "BreakToCommand":
+                    self.io_handler.cmdline(self)
+                else:
+                    self.current_node = self.nodes[option.next_node_id]
             else:
                 print("选项不存在")
             
