@@ -27,11 +27,24 @@
 
 ## 🚀 30 秒上手
 
+Linux:
 ````bash
 git clone https://github.com/zaf-x/TextAdventure.git 
 cd TextAdventure
+python3 -m venv venv
 source venv/bin/activate
+pip install -r requirements.txt
 python3 example.py
+````
+
+Windows:
+````bash
+git clone https://github.com/zaf-x/TextAdventure.git 
+cd TextAdventure
+python -m venv venv
+venv\Scripts\activate.bat
+pip install -r requirements.txt
+python example.py
 ````
 
 然后选择选项，开始你的冒险。
