@@ -68,7 +68,7 @@ SAFE_BUILTINS["__builtins__"]["__import__"] = import_safe
 
 STANDALONE_SCRIPT_MOD = """
 '''
-WARNING: This script is created by standalone_script_creator.py.
+WARNING: This script is created by a standalone script creator.
 Do not modify this file manually.
 modifications may cause unexpected behavior.
 '''
